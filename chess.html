@@ -1,0 +1,988 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ice vs Fire Chess — Live Multiplayer</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #1a1a2e;
+      min-height: 100vh;
+      font-family: 'Segoe UI', sans-serif;
+      color: #eee;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 20px 10px;
+    }
+
+    h1 {
+      font-size: 1.6rem;
+      letter-spacing: 3px;
+      margin-bottom: 4px;
+      text-transform: uppercase;
+      text-align: center;
+    }
+
+    .ice-text  { color: #e0f7ff; }
+    .fire-text { color: #ff6b35; }
+
+    .subtitle {
+      color: #4a6a8a;
+      margin-bottom: 18px;
+      font-size: 0.78rem;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+    }
+
+    .game-container {
+      display: flex;
+      gap: 18px;
+      align-items: flex-start;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    /* ── Board ── */
+    .board-wrapper { display: flex; flex-direction: column; align-items: center; }
+
+    .rank-label, .file-label {
+      font-size: 11px; color: #3a5a7a;
+      width: 18px; text-align: center;
+    }
+    .file-labels { display: flex; padding-left: 18px; margin-top: 4px; }
+    .file-label  { width: 64px; }
+
+    .board {
+      display: grid;
+      grid-template-columns: repeat(8, 64px);
+      grid-template-rows:    repeat(8, 64px);
+      border: 2px solid #0a1628;
+      box-shadow: 0 0 40px rgba(79,195,247,0.15), 0 0 80px rgba(255,107,53,0.08);
+    }
+
+    .square {
+      width: 64px; height: 64px;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; position: relative;
+      transition: background 0.1s; user-select: none;
+    }
+    .square.light { background: #1b3a5e; }
+    .square.dark  { background: #0d2040; }
+
+    .square.selected    { background: rgba(200,240,255,0.45) !important; }
+    .square.last-move   { background: rgba(255,220,80,0.18)  !important; }
+    .square.in-check    { background: rgba(220,30,30,0.55)   !important; }
+
+    .square.legal-move::after {
+      content: ''; position: absolute;
+      width: 22px; height: 22px;
+      background: rgba(200,240,255,0.55);
+      border-radius: 50%; pointer-events: none;
+    }
+    .square.legal-capture { background: rgba(255,107,53,0.35) !important; }
+    .square.legal-capture::after {
+      content: ''; position: absolute; inset: 0;
+      border: 3px solid rgba(255,107,53,0.8);
+      border-radius: 2px; pointer-events: none;
+    }
+
+    .piece {
+      font-size: 36px; line-height: 1;
+      pointer-events: none; transition: transform 0.1s;
+    }
+    .piece.ice  { color: #e8f8ff; filter: drop-shadow(0 0 6px rgba(200,240,255,1)) drop-shadow(0 0 2px #a0d8f0); }
+    .piece.fire { color: #ff6b35; filter: drop-shadow(0 0 5px rgba(255,107,53,0.7)); }
+
+    /* ── Panel ── */
+    .panel { width: 215px; display: flex; flex-direction: column; gap: 12px; }
+
+    .panel-box {
+      background: #16213e; border-radius: 8px;
+      padding: 12px 14px; border: 1px solid #0f3460;
+    }
+    .panel-box h3 {
+      font-size: 0.68rem; text-transform: uppercase;
+      letter-spacing: 2px; color: #3a6a9a; margin-bottom: 8px;
+    }
+
+    /* Room info */
+    .room-code {
+      font-family: monospace; font-size: 1.5rem;
+      letter-spacing: 6px; color: #4fc3f7;
+      font-weight: bold; text-align: center; padding: 2px 0 6px;
+    }
+    .player-role {
+      text-align: center; font-size: 0.8rem;
+      font-weight: bold; padding: 2px 0;
+    }
+    .player-role.ice        { color: #c8f0ff; }
+    .player-role.fire       { color: #ff6b35; }
+    .player-role.spectator  { color: #666; }
+
+    .opp-status {
+      display: flex; align-items: center; justify-content: center;
+      gap: 6px; font-size: 0.71rem; margin-top: 5px;
+    }
+    .status-dot {
+      width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+    }
+    .status-dot.online  { background: #4caf50; box-shadow: 0 0 6px #4caf50; }
+    .status-dot.offline { background: #555; }
+
+    /* Turn */
+    .turn-indicator {
+      display: flex; align-items: center; gap: 10px;
+      font-size: 0.95rem; font-weight: bold;
+    }
+    .turn-dot { width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0; }
+    .turn-dot.ice  { background: #c8f0ff; box-shadow: 0 0 10px #c8f0ff; }
+    .turn-dot.fire { background: #ff6b35; box-shadow: 0 0 10px #ff6b35; }
+
+    #statusText   { margin-top: 5px; font-size: 0.75rem; color: #e94560; font-weight: bold; }
+    #yourTurnText { margin-top: 4px; font-size: 0.72rem; }
+
+    /* Buttons */
+    .btn {
+      width: 100%; padding: 10px; border: none; border-radius: 6px;
+      cursor: pointer; font-size: 0.8rem; font-family: 'Segoe UI', sans-serif;
+      font-weight: bold; letter-spacing: 1px; text-transform: uppercase;
+      transition: all 0.2s;
+    }
+    .btn-share { background: linear-gradient(135deg, #a0d8f0, #0277bd); color: #fff; }
+    .btn-share:hover { opacity: 0.85; transform: translateY(-1px); }
+    .btn-reset { background: #16213e; color: #556; border: 1px solid #0f3460; }
+    .btn-reset:hover { color: #eee; border-color: #4fc3f7; }
+
+    /* Captured */
+    .captured-row { display: flex; flex-wrap: wrap; gap: 1px; min-height: 26px; }
+    .cap-piece { font-size: 18px; }
+    .cap-piece.ice  { color: #c8f0ff; }
+    .cap-piece.fire { color: #ff6b35; }
+
+    /* Move history */
+    .move-history {
+      max-height: 160px; overflow-y: auto;
+      font-size: 0.75rem; font-family: monospace; color: #aaa;
+    }
+    .move-history::-webkit-scrollbar { width: 3px; }
+    .move-history::-webkit-scrollbar-track { background: #0f2040; }
+    .move-history::-webkit-scrollbar-thumb { background: #4fc3f7; border-radius: 2px; }
+    .move-pair { display: flex; gap: 4px; padding: 1px 0; }
+    .move-num  { color: #3a5a7a; width: 22px; }
+    .move-w    { color: #c8f0ff; width: 55px; }
+    .move-b    { color: #ff6b35; width: 55px; }
+
+    /* Legend */
+    .legend { display: flex; flex-direction: column; gap: 2px; font-size: 0.72rem; }
+    .legend-section { margin-bottom: 4px; font-size: 0.65rem; letter-spacing: 2px; text-transform: uppercase; }
+    .legend-row { display: flex; align-items: center; gap: 6px; padding: 1px 0; }
+    .legend-sym { font-size: 17px; width: 20px; text-align: center; }
+
+    /* Toast */
+    .toast {
+      position: fixed; bottom: 28px; left: 50%;
+      transform: translateX(-50%) translateY(80px);
+      background: #16213e; border: 1px solid #4fc3f7;
+      color: #4fc3f7; padding: 11px 22px;
+      border-radius: 8px; font-size: 0.85rem;
+      transition: transform 0.35s cubic-bezier(.175,.885,.32,1.275);
+      z-index: 1000; white-space: nowrap;
+    }
+    .toast.show { transform: translateX(-50%) translateY(0); }
+
+    /* Overlays */
+    .overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,0.82); z-index: 100;
+      align-items: center; justify-content: center;
+    }
+    .overlay.show { display: flex; }
+    .game-over-box {
+      background: #16213e; border-radius: 14px;
+      padding: 40px 50px; text-align: center;
+    }
+    .game-over-box h2 { font-size: 1.8rem; margin-bottom: 8px; }
+    .game-over-box p  { color: #888; margin-bottom: 24px; }
+    .game-over-box.ice-win  { border: 2px solid #c8f0ff; box-shadow: 0 0 30px rgba(200,240,255,0.4); }
+    .game-over-box.fire-win { border: 2px solid #ff6b35; box-shadow: 0 0 30px rgba(255,107,53,0.3); }
+    .game-over-box.draw     { border: 2px solid #888; }
+
+    .promo-modal {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,0.85); z-index: 200;
+      align-items: center; justify-content: center;
+    }
+    .promo-modal.show { display: flex; }
+    .promo-box {
+      background: #16213e; border: 2px solid #4fc3f7;
+      border-radius: 12px; padding: 28px 36px; text-align: center;
+    }
+    .promo-box h3 { margin-bottom: 18px; color: #eee; letter-spacing: 2px; font-size: 0.85rem; text-transform: uppercase; }
+    .promo-pieces { display: flex; gap: 12px; justify-content: center; }
+    .promo-piece {
+      width: 64px; height: 64px; background: #0f2040;
+      border-radius: 8px; display: flex; align-items: center; justify-content: center;
+      font-size: 36px; cursor: pointer;
+      border: 2px solid transparent; transition: all 0.2s;
+    }
+    .promo-piece:hover { border-color: #4fc3f7; background: #1e3a5f; transform: scale(1.05); }
+
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+    .pulse { animation: pulse 1.8s ease-in-out infinite; }
+
+    /* Firebase error banner */
+    .fb-error {
+      display: none; background: #2a1020; border: 1px solid #e94560;
+      color: #e94560; font-size: 0.72rem; padding: 8px 12px;
+      border-radius: 6px; text-align: center; line-height: 1.5;
+    }
+    .fb-error.show { display: block; }
+    .fb-error a { color: #ff9999; }
+  </style>
+</head>
+<body>
+
+<h1>
+  <span class="ice-text">❄ Ice Warriors</span>
+  <span style="color:#2a3a5a"> vs </span>
+  <span class="fire-text">Fire Warriors 🔥</span>
+</h1>
+<p class="subtitle">Live Multiplayer Chess</p>
+
+<div class="game-container">
+
+  <!-- Board -->
+  <div class="board-wrapper">
+    <div id="boardArea"></div>
+    <div class="file-labels" id="fileLabels"></div>
+  </div>
+
+  <!-- Panel -->
+  <div class="panel">
+
+    <!-- Room info -->
+    <div class="panel-box">
+      <h3>Room Code</h3>
+      <div class="room-code" id="roomCodeDisplay">------</div>
+      <div class="player-role" id="playerRole">Connecting...</div>
+      <div class="opp-status" id="oppStatus">
+        <span class="status-dot offline" id="oppDot"></span>
+        <span id="oppText" class="pulse">Waiting for opponent...</span>
+      </div>
+    </div>
+
+    <!-- Firebase error -->
+    <div class="fb-error" id="fbError">
+      ⚠ Can't connect to Firebase.<br>
+      Go to your <a href="https://console.firebase.google.com/project/fire-vs-ice-8d376/database/fire-vs-ice-8d376-default-rtdb/rules" target="_blank">Firebase Rules</a>
+      and set <code>".read": true, ".write": true</code>
+    </div>
+
+    <!-- Turn -->
+    <div class="panel-box">
+      <h3>Current Turn</h3>
+      <div class="turn-indicator">
+        <div class="turn-dot ice" id="turnDot"></div>
+        <span id="turnText">Ice Warriors</span>
+      </div>
+      <div id="statusText"></div>
+      <div id="yourTurnText"></div>
+    </div>
+
+    <!-- Captured -->
+    <div class="panel-box">
+      <h3>❄ Captured by Ice</h3>
+      <div class="captured-row" id="capturedByIce"></div>
+      <h3 style="margin-top:10px">🔥 Captured by Fire</h3>
+      <div class="captured-row" id="capturedByFire"></div>
+    </div>
+
+    <!-- Move history -->
+    <div class="panel-box">
+      <h3>Move History</h3>
+      <div class="move-history" id="moveHistory"></div>
+    </div>
+
+    <button class="btn btn-share" id="shareBtn">📋 Copy Room Link</button>
+    <button class="btn btn-reset" id="resetBtn">↺ New Game</button>
+
+    <!-- Legend -->
+    <div class="panel-box">
+      <h3>Piece Legend</h3>
+      <div class="legend">
+        <div class="legend-section" style="color:#e0f7ff">Ice Warriors</div>
+        <div class="legend-row"><span class="legend-sym ice-text">♔</span><span style="color:#e0f7ff">Glacier King</span></div>
+        <div class="legend-row"><span class="legend-sym ice-text">♕</span><span style="color:#e0f7ff">Blizzard Queen</span></div>
+        <div class="legend-row"><span class="legend-sym ice-text">♖</span><span style="color:#e0f7ff">Ice Fortress</span></div>
+        <div class="legend-row"><span class="legend-sym ice-text">♗</span><span style="color:#e0f7ff">Crystal Sage</span></div>
+        <div class="legend-row"><span class="legend-sym ice-text">♘</span><span style="color:#e0f7ff">Arctic Wolf</span></div>
+        <div class="legend-row"><span class="legend-sym ice-text">♙</span><span style="color:#e0f7ff">Frost Soldier</span></div>
+        <div class="legend-section" style="color:#ff6b35; margin-top:8px">Fire Warriors</div>
+        <div class="legend-row"><span class="legend-sym fire-text">♚</span><span style="color:#ff6b35">Inferno King</span></div>
+        <div class="legend-row"><span class="legend-sym fire-text">♛</span><span style="color:#ff6b35">Flame Queen</span></div>
+        <div class="legend-row"><span class="legend-sym fire-text">♜</span><span style="color:#ff6b35">Ember Fortress</span></div>
+        <div class="legend-row"><span class="legend-sym fire-text">♝</span><span style="color:#ff6b35">Phoenix Sage</span></div>
+        <div class="legend-row"><span class="legend-sym fire-text">♞</span><span style="color:#ff6b35">Hellhorse</span></div>
+        <div class="legend-row"><span class="legend-sym fire-text">♟</span><span style="color:#ff6b35">Cinder Soldier</span></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<!-- Game Over -->
+<div class="overlay" id="overlay">
+  <div class="game-over-box" id="gameOverBox">
+    <h2 id="gameOverTitle"></h2>
+    <p  id="gameOverMsg"></p>
+    <button class="btn btn-share" onclick="resetGame()">Play Again</button>
+  </div>
+</div>
+
+<!-- Promotion -->
+<div class="promo-modal" id="promoModal">
+  <div class="promo-box">
+    <h3>Choose Promotion</h3>
+    <div class="promo-pieces" id="promoPieces"></div>
+  </div>
+</div>
+
+<script>
+// ─── Firebase config ──────────────────────────────────────────────────────────
+const DB = 'https://fire-vs-ice-8d376-default-rtdb.firebaseio.com';
+
+// ─── Piece symbols ────────────────────────────────────────────────────────────
+const SYM = {
+  wK:'♔', wQ:'♕', wR:'♖', wB:'♗', wN:'♘', wP:'♙',
+  bK:'♚', bQ:'♛', bR:'♜', bB:'♝', bN:'♞', bP:'♟'
+};
+const FILES = 'abcdefgh';
+
+// ─── Game state ───────────────────────────────────────────────────────────────
+let board, turn, castling, epTarget, lastMove,
+    moveHistory, capturedW, capturedB,
+    selected, legalMoves, gameOver, pendingPromo, gameOverData;
+
+function freshState() {
+  board = Array.from({length:8}, () => Array(8).fill(null));
+  const back = ['R','N','B','Q','K','B','N','R'];
+  for (let c = 0; c < 8; c++) {
+    board[0][c] = {t: back[c], c: 'b'};
+    board[1][c] = {t: 'P',     c: 'b'};
+    board[6][c] = {t: 'P',     c: 'w'};
+    board[7][c] = {t: back[c], c: 'w'};
+  }
+  turn         = 'w';
+  castling     = {wK:true, wQ:true, bK:true, bQ:true};
+  epTarget     = null;
+  lastMove     = null;
+  moveHistory  = [];
+  capturedW    = [];
+  capturedB    = [];
+  selected     = null;
+  legalMoves   = [];
+  gameOver     = false;
+  pendingPromo = null;
+  gameOverData = null;
+}
+
+// ─── Multiplayer state ────────────────────────────────────────────────────────
+let roomCode       = null;
+let myColor        = null;   // 'w' | 'b' | null (spectator)
+let opponentOnline = false;
+let lastSyncedFen  = null;
+let pollTimer      = null;
+let fbOk           = true;
+
+// ─── Firebase REST helpers ────────────────────────────────────────────────────
+async function fbGet(path) {
+  try {
+    const r = await fetch(`${DB}/${path}.json`);
+    if (!r.ok) { setFbError(true); return null; }
+    setFbError(false);
+    return await r.json();
+  } catch { setFbError(true); return null; }
+}
+
+async function fbSet(path, data) {
+  try {
+    const r = await fetch(`${DB}/${path}.json`, {
+      method: 'PUT',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(data)
+    });
+    setFbError(!r.ok);
+    return r.ok;
+  } catch { setFbError(true); return false; }
+}
+
+async function fbPatch(path, data) {
+  try {
+    const r = await fetch(`${DB}/${path}.json`, {
+      method: 'PATCH',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(data)
+    });
+    setFbError(!r.ok);
+    return r.ok;
+  } catch { setFbError(true); return false; }
+}
+
+function setFbError(isError) {
+  fbOk = !isError;
+  document.getElementById('fbError').classList.toggle('show', isError);
+}
+
+// ─── Chess logic ──────────────────────────────────────────────────────────────
+function opp(c) { return c==='w'?'b':'w'; }
+
+function pseudoMoves(b, r, c, ep, cr) {
+  const p = b[r][c]; if (!p) return [];
+  const mvs=[], {t,c:col}=p, en=opp(col);
+
+  function add(nr,nc,sp) {
+    if (nr<0||nr>7||nc<0||nc>7) return;
+    if (b[nr][nc]&&b[nr][nc].c===col) return;
+    mvs.push({from:[r,c],to:[nr,nc],sp});
+  }
+  function slide(dr,dc) {
+    let nr=r+dr,nc=c+dc;
+    while(nr>=0&&nr<8&&nc>=0&&nc<8){
+      if(b[nr][nc]){if(b[nr][nc].c===en)mvs.push({from:[r,c],to:[nr,nc]});break;}
+      mvs.push({from:[r,c],to:[nr,nc]});
+      nr+=dr;nc+=dc;
+    }
+  }
+
+  if(t==='P'){
+    const d=col==='w'?-1:1,sr=col==='w'?6:1,nr=r+d;
+    if(nr>=0&&nr<8){
+      if(!b[nr][c]){
+        mvs.push({from:[r,c],to:[nr,c],sp:(nr===0||nr===7)?'promo':null});
+        if(r===sr&&!b[r+2*d][c])mvs.push({from:[r,c],to:[r+2*d,c],sp:'double'});
+      }
+      for(const dc of[-1,1]){
+        const nc=c+dc;
+        if(nc>=0&&nc<8){
+          if(b[nr][nc]&&b[nr][nc].c===en)mvs.push({from:[r,c],to:[nr,nc],sp:(nr===0||nr===7)?'promo':null});
+          if(ep&&ep[0]===nr&&ep[1]===nc)mvs.push({from:[r,c],to:[nr,nc],sp:'ep'});
+        }
+      }
+    }
+  }else if(t==='R'){
+    [[0,1],[0,-1],[1,0],[-1,0]].forEach(([dr,dc])=>slide(dr,dc));
+  }else if(t==='N'){
+    [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]].forEach(([dr,dc])=>add(r+dr,c+dc));
+  }else if(t==='B'){
+    [[1,1],[1,-1],[-1,1],[-1,-1]].forEach(([dr,dc])=>slide(dr,dc));
+  }else if(t==='Q'){
+    [[0,1],[0,-1],[1,0],[-1,0],[1,1],[1,-1],[-1,1],[-1,-1]].forEach(([dr,dc])=>slide(dr,dc));
+  }else if(t==='K'){
+    [[0,1],[0,-1],[1,0],[-1,0],[1,1],[1,-1],[-1,1],[-1,-1]].forEach(([dr,dc])=>add(r+dr,c+dc));
+    const noCr={wK:false,wQ:false,bK:false,bQ:false};
+    if(col==='w'){
+      if(cr.wK&&!b[7][5]&&!b[7][6]&&!attacked(b,7,4,en,noCr)&&!attacked(b,7,5,en,noCr)&&!attacked(b,7,6,en,noCr))mvs.push({from:[r,c],to:[7,6],sp:'ck'});
+      if(cr.wQ&&!b[7][3]&&!b[7][2]&&!b[7][1]&&!attacked(b,7,4,en,noCr)&&!attacked(b,7,3,en,noCr)&&!attacked(b,7,2,en,noCr))mvs.push({from:[r,c],to:[7,2],sp:'cq'});
+    }else{
+      if(cr.bK&&!b[0][5]&&!b[0][6]&&!attacked(b,0,4,en,noCr)&&!attacked(b,0,5,en,noCr)&&!attacked(b,0,6,en,noCr))mvs.push({from:[r,c],to:[0,6],sp:'ck'});
+      if(cr.bQ&&!b[0][3]&&!b[0][2]&&!b[0][1]&&!attacked(b,0,4,en,noCr)&&!attacked(b,0,3,en,noCr)&&!attacked(b,0,2,en,noCr))mvs.push({from:[r,c],to:[0,2],sp:'cq'});
+    }
+  }
+  return mvs;
+}
+
+function attacked(b,r,c,byColor,cr){
+  for(let i=0;i<8;i++)for(let j=0;j<8;j++){
+    if(b[i][j]&&b[i][j].c===byColor){
+      const ms=pseudoMoves(b,i,j,null,cr||{wK:false,wQ:false,bK:false,bQ:false});
+      if(ms.some(m=>m.to[0]===r&&m.to[1]===c))return true;
+    }
+  }
+  return false;
+}
+
+function kingPos(b,col){
+  for(let r=0;r<8;r++)for(let c=0;c<8;c++)
+    if(b[r][c]&&b[r][c].t==='K'&&b[r][c].c===col)return[r,c];
+  return null;
+}
+
+function applyMove(b,mv,ep,cr){
+  const nb=b.map(row=>row.map(p=>p?{...p}:null));
+  const[fr,fc]=mv.from,[tr,tc]=mv.to;
+  const piece=nb[fr][fc]; let cap=nb[tr][tc],newEp=null;
+  const ncr={...cr};
+  nb[tr][tc]=piece; nb[fr][fc]=null;
+  if(mv.sp==='double')newEp=[tr+(piece.c==='w'?1:-1),tc];
+  if(mv.sp==='ep'){const r2=piece.c==='w'?tr+1:tr-1;cap=nb[r2][tc];nb[r2][tc]=null;}
+  if(mv.sp==='ck'){const row=piece.c==='w'?7:0;nb[row][5]=nb[row][7];nb[row][7]=null;}
+  if(mv.sp==='cq'){const row=piece.c==='w'?7:0;nb[row][3]=nb[row][0];nb[row][0]=null;}
+  if(piece.t==='K'){if(piece.c==='w'){ncr.wK=false;ncr.wQ=false;}else{ncr.bK=false;ncr.bQ=false;}}
+  if(piece.t==='R'){
+    if(piece.c==='w'){if(fc===7)ncr.wK=false;if(fc===0)ncr.wQ=false;}
+    else{if(fc===7)ncr.bK=false;if(fc===0)ncr.bQ=false;}
+  }
+  return{board:nb,ep:newEp,cr:ncr,cap};
+}
+
+function legalFor(b,r,c,ep,cr){
+  const p=b[r][c];if(!p)return[];
+  return pseudoMoves(b,r,c,ep,cr).filter(mv=>{
+    const{board:nb}=applyMove(b,mv,ep,cr);
+    const kp=kingPos(nb,p.c);
+    return kp&&!attacked(nb,kp[0],kp[1],opp(p.c));
+  });
+}
+
+function allLegal(b,col,ep,cr){
+  const mvs=[];
+  for(let r=0;r<8;r++)for(let c=0;c<8;c++)
+    if(b[r][c]&&b[r][c].c===col)mvs.push(...legalFor(b,r,c,ep,cr));
+  return mvs;
+}
+
+function inCheck(b,col){
+  const kp=kingPos(b,col);
+  return kp?attacked(b,kp[0],kp[1],opp(col)):false;
+}
+
+// ─── Notation ─────────────────────────────────────────────────────────────────
+function notation(b,mv,ep,cr){
+  const p=b[mv.from[0]][mv.from[1]];if(!p)return'';
+  if(mv.sp==='ck')return'O-O';
+  if(mv.sp==='cq')return'O-O-O';
+  const to=FILES[mv.to[1]]+(8-mv.to[0]);
+  let n=p.t!=='P'?p.t:'';
+  const isCap=b[mv.to[0]][mv.to[1]]||mv.sp==='ep';
+  if(isCap){if(p.t==='P')n+=FILES[mv.from[1]];n+='x';}
+  n+=to;
+  if(mv.sp==='promo')n+='=Q';
+  return n;
+}
+
+// ─── FEN ──────────────────────────────────────────────────────────────────────
+function toFEN(){
+  let fen='';
+  for(let r=0;r<8;r++){
+    let e=0;
+    for(let c=0;c<8;c++){
+      const p=board[r][c];
+      if(!p){e++;}else{if(e){fen+=e;e=0;}fen+=p.c==='w'?p.t.toUpperCase():p.t.toLowerCase();}
+    }
+    if(e)fen+=e;if(r<7)fen+='/';
+  }
+  let cr='';
+  if(castling.wK)cr+='K';if(castling.wQ)cr+='Q';
+  if(castling.bK)cr+='k';if(castling.bQ)cr+='q';
+  const ep=epTarget?FILES[epTarget[1]]+(8-epTarget[0]):'-';
+  return`${fen} ${turn} ${cr||'-'} ${ep}`;
+}
+
+function fromFEN(fen){
+  const parts=fen.split(' ');
+  const nb=Array.from({length:8},()=>Array(8).fill(null));
+  parts[0].split('/').forEach((rank,r)=>{
+    let c=0;
+    for(const ch of rank){
+      if(/\d/.test(ch)){c+=+ch;}
+      else{nb[r][c]={t:ch.toUpperCase(),c:ch===ch.toUpperCase()?'w':'b'};c++;}
+    }
+  });
+  board=nb; turn=parts[1]||'w';
+  const cr=parts[2]||'-';
+  castling={wK:cr.includes('K'),wQ:cr.includes('Q'),bK:cr.includes('k'),bQ:cr.includes('q')};
+  epTarget=(parts[3]&&parts[3]!=='-')?[8-+parts[3][1],FILES.indexOf(parts[3][0])]:null;
+}
+
+// ─── Rendering ────────────────────────────────────────────────────────────────
+function buildBoard(){
+  const area=document.getElementById('boardArea');
+  area.innerHTML='';
+  const kp=inCheck(board,turn)?kingPos(board,turn):null;
+
+  for(let r=0;r<8;r++){
+    const row=document.createElement('div');
+    row.style.cssText='display:flex;align-items:center;';
+    const lbl=document.createElement('div');
+    lbl.className='rank-label'; lbl.textContent=8-r;
+    row.appendChild(lbl);
+
+    for(let c=0;c<8;c++){
+      const sq=document.createElement('div');
+      sq.className='square '+((r+c)%2===0?'light':'dark');
+
+      if(lastMove&&((lastMove.from[0]===r&&lastMove.from[1]===c)||(lastMove.to[0]===r&&lastMove.to[1]===c)))sq.classList.add('last-move');
+      if(selected&&selected[0]===r&&selected[1]===c)sq.classList.add('selected');
+
+      const isLegal=legalMoves.some(m=>m.to[0]===r&&m.to[1]===c);
+      if(isLegal){if(board[r][c])sq.classList.add('legal-capture');else sq.classList.add('legal-move');}
+      if(kp&&kp[0]===r&&kp[1]===c)sq.classList.add('in-check');
+
+      const p=board[r][c];
+      if(p){
+        const pe=document.createElement('div');
+        pe.className='piece '+(p.c==='w'?'ice':'fire');
+        pe.textContent=SYM[p.c+p.t];
+        sq.appendChild(pe);
+      }
+
+      sq.addEventListener('click',()=>click(r,c));
+      row.appendChild(sq);
+    }
+    area.appendChild(row);
+  }
+
+  const fl=document.getElementById('fileLabels');
+  fl.innerHTML='<div style="width:18px"></div>';
+  for(let c=0;c<8;c++){
+    const lbl=document.createElement('div');
+    lbl.className='file-label'; lbl.textContent=FILES[c];
+    fl.appendChild(lbl);
+  }
+}
+
+function click(r,c){
+  if(gameOver||pendingPromo)return;
+  // Block moves when it's not your turn
+  if(myColor!==null&&turn!==myColor){
+    toast("⏳ It's not your turn!");
+    return;
+  }
+  const p=board[r][c];
+  if(selected){
+    const mv=legalMoves.find(m=>m.to[0]===r&&m.to[1]===c);
+    if(mv){doMove(mv);return;}
+  }
+  if(p&&p.c===turn){
+    selected=[r,c];
+    legalMoves=legalFor(board,r,c,epTarget,castling);
+  }else{
+    selected=null; legalMoves=[];
+  }
+  buildBoard();
+}
+
+function doMove(mv){
+  const note=notation(board,mv,epTarget,castling);
+  const{board:nb,ep,cr,cap}=applyMove(board,mv,epTarget,castling);
+  if(cap){if(turn==='w')capturedW.push(cap);else capturedB.push(cap);}
+  board=nb; epTarget=ep; castling=cr; lastMove=mv;
+  if(mv.sp==='promo'){
+    const piece=board[mv.to[0]][mv.to[1]];
+    pendingPromo={r:mv.to[0],c:mv.to[1],col:piece.c,note,mv};
+    showPromo(piece.c); return;
+  }
+  finishMove(note);
+}
+
+function showPromo(col){
+  const modal=document.getElementById('promoModal');
+  const box=document.getElementById('promoPieces');
+  box.innerHTML='';
+  for(const t of['Q','R','B','N']){
+    const btn=document.createElement('div');
+    btn.className='promo-piece';
+    const pe=document.createElement('span');
+    pe.className='piece '+(col==='w'?'ice':'fire');
+    pe.style.pointerEvents='none';
+    pe.textContent=SYM[col+t];
+    btn.appendChild(pe);
+    btn.addEventListener('click',()=>{
+      board[pendingPromo.r][pendingPromo.c]={t,c:col};
+      const n2=pendingPromo.note.replace('=Q','='+t);
+      pendingPromo=null;
+      modal.classList.remove('show');
+      finishMove(n2);
+    });
+    box.appendChild(btn);
+  }
+  modal.classList.add('show');
+}
+
+function finishMove(note){
+  const movedColor=turn;
+  turn=opp(turn);
+
+  const allMvs=allLegal(board,turn,epTarget,castling);
+  const checked=inCheck(board,turn);
+  let suffix='';
+
+  if(allMvs.length===0){
+    suffix=checked?'#':'';
+    gameOverData={
+      title: checked?(movedColor==='w'?'❄ Ice Warriors Win!':'🔥 Fire Warriors Win!'):'⚔ Stalemate',
+      msg:   checked?'by Checkmate ♟':"Stalemate — It's a Draw",
+      winner:checked?movedColor:null
+    };
+    gameOver=true;
+    showGameOver(gameOverData.title,gameOverData.msg,gameOverData.winner);
+  }else if(checked){
+    suffix='+';
+  }
+
+  moveHistory.push({note:note+suffix,col:movedColor});
+  selected=null; legalMoves=[];
+
+  updateSidebar();
+  buildBoard();
+  updateTurnIndicator(checked&&allMvs.length>0);
+  syncToFirebase();
+}
+
+function showGameOver(title,msg,winner){
+  gameOver=true;
+  const box=document.getElementById('gameOverBox');
+  box.className='game-over-box '+(winner==='w'?'ice-win':winner==='b'?'fire-win':'draw');
+  document.getElementById('gameOverTitle').textContent=title;
+  document.getElementById('gameOverMsg').textContent=msg;
+  document.getElementById('overlay').classList.add('show');
+}
+
+function updateTurnIndicator(showCheck){
+  document.getElementById('turnDot').className='turn-dot '+(turn==='w'?'ice':'fire');
+  document.getElementById('turnText').textContent=turn==='w'?'Ice Warriors':'Fire Warriors';
+  document.getElementById('statusText').textContent=showCheck?'⚠ Check!':'';
+  const yt=document.getElementById('yourTurnText');
+  if(myColor===null){yt.textContent='👁 Spectating';yt.style.color='#666';}
+  else if(gameOver){yt.textContent='';yt.style.color='';}
+  else if(turn===myColor){yt.textContent='▶ Your Turn!';yt.style.color='#4fc3f7';}
+  else{yt.textContent='⏳ Opponent\'s Turn…';yt.style.color='#888';}
+}
+
+function updateSidebar(){
+  const mh=document.getElementById('moveHistory');
+  mh.innerHTML='';
+  for(let i=0;i<moveHistory.length;i+=2){
+    const div=document.createElement('div');
+    div.className='move-pair';
+    div.innerHTML=`<span class="move-num">${Math.floor(i/2)+1}.</span>`+
+      `<span class="move-w">${moveHistory[i]?.note||''}</span>`+
+      `<span class="move-b">${moveHistory[i+1]?.note||''}</span>`;
+    mh.appendChild(div);
+  }
+  mh.scrollTop=mh.scrollHeight;
+
+  document.getElementById('capturedByIce').innerHTML=
+    capturedW.map(p=>`<span class="cap-piece fire">${SYM[p.c+p.t]}</span>`).join('');
+  document.getElementById('capturedByFire').innerHTML=
+    capturedB.map(p=>`<span class="cap-piece ice">${SYM[p.c+p.t]}</span>`).join('');
+}
+
+// ─── Firebase sync ────────────────────────────────────────────────────────────
+async function syncToFirebase(){
+  if(!roomCode)return;
+  const fen=toFEN();
+  lastSyncedFen=fen;
+  await fbPatch(`rooms/${roomCode}`,{
+    fen, moveHistory, capturedW, capturedB,
+    lastMove, gameOver, gameOverData:gameOverData||null
+  });
+}
+
+function loadRoomState(data){
+  if(!data)return;
+  if(data.fen){fromFEN(data.fen);lastSyncedFen=data.fen;}
+  moveHistory =(Array.isArray(data.moveHistory)?data.moveHistory:[]);
+  capturedW   =(Array.isArray(data.capturedW)?data.capturedW:[]);
+  capturedB   =(Array.isArray(data.capturedB)?data.capturedB:[]);
+  lastMove    =data.lastMove||null;
+  gameOver    =data.gameOver||false;
+  gameOverData=data.gameOverData||null;
+  selected=null; legalMoves=[]; pendingPromo=null;
+  if(gameOver&&gameOverData){
+    showGameOver(gameOverData.title,gameOverData.msg,gameOverData.winner);
+  }
+}
+
+function applyRemoteState(data){
+  loadRoomState(data);
+  // Update opponent online status
+  const iceOn=!!data.players?.ice, fireOn=!!data.players?.fire;
+  opponentOnline=myColor==='w'?fireOn:myColor==='b'?iceOn:false;
+  updateOpponentStatus();
+  updateSidebar();
+  buildBoard();
+  updateTurnIndicator(inCheck(board,turn)&&!gameOver&&allLegal(board,turn,epTarget,castling).length>0);
+}
+
+// ─── Polling ──────────────────────────────────────────────────────────────────
+function startPolling(){
+  stopPolling();
+  pollTimer=setInterval(async()=>{
+    const data=await fbGet(`rooms/${roomCode}`);
+    if(!data)return;
+    // Update opponent status regardless
+    const iceOn=!!data.players?.ice, fireOn=!!data.players?.fire;
+    opponentOnline=myColor==='w'?fireOn:myColor==='b'?iceOn:false;
+    updateOpponentStatus();
+    // Apply if state has changed
+    if(data.fen&&data.fen!==lastSyncedFen){
+      applyRemoteState(data);
+    }
+  },1200);
+}
+
+function stopPolling(){
+  if(pollTimer){clearInterval(pollTimer);pollTimer=null;}
+}
+
+// ─── Multiplayer UI ───────────────────────────────────────────────────────────
+function updateOpponentStatus(){
+  const dot=document.getElementById('oppDot');
+  const txt=document.getElementById('oppText');
+  if(opponentOnline){
+    dot.className='status-dot online';
+    txt.textContent=(myColor==='w'?'🔥 Fire Warrior':'❄ Ice Warrior')+' is online';
+    txt.classList.remove('pulse');
+  }else{
+    dot.className='status-dot offline';
+    txt.textContent='Waiting for opponent…';
+    txt.classList.add('pulse');
+  }
+}
+
+function updateMultiplayerUI(){
+  document.getElementById('roomCodeDisplay').textContent=roomCode||'------';
+  const role=document.getElementById('playerRole');
+  if(myColor==='w'){role.textContent='You are: ❄ Ice Warriors';role.className='player-role ice';}
+  else if(myColor==='b'){role.textContent='You are: 🔥 Fire Warriors';role.className='player-role fire';}
+  else{role.textContent='👁 Spectating';role.className='player-role spectator';}
+  updateOpponentStatus();
+  updateTurnIndicator(false);
+}
+
+// ─── Room init ────────────────────────────────────────────────────────────────
+function genRoom(){
+  const chars='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let code='';
+  for(let i=0;i<6;i++)code+=chars[Math.floor(Math.random()*chars.length)];
+  return code;
+}
+
+async function initMultiplayer(){
+  const params=new URLSearchParams(location.search);
+  const urlRoom=params.get('room');
+
+  if(!urlRoom){
+    // ── Creator: new room ──
+    roomCode=genRoom();
+    myColor='w';
+    freshState();
+    localStorage.setItem(`chess_${roomCode}`,'w');
+
+    const url=new URL(location.href);
+    url.searchParams.set('room',roomCode);
+    history.replaceState(null,'',url.toString());
+
+    const fen=toFEN();
+    lastSyncedFen=fen;
+    const ok=await fbSet(`rooms/${roomCode}`,{
+      fen, moveHistory:[], capturedW:[], capturedB:[],
+      lastMove:null, gameOver:false, gameOverData:null,
+      players:{ice:true,fire:false}
+    });
+    if(!ok){
+      toast('⚠ Firebase error — see the red box above for help');
+    }else{
+      toast('Room created! Click "Copy Room Link" to invite your friend ❄');
+    }
+  }else{
+    // ── Joiner: existing room ──
+    roomCode=urlRoom;
+    const saved=localStorage.getItem(`chess_${roomCode}`);
+    if(saved){
+      // Returning player
+      myColor=saved;
+      const data=await fbGet(`rooms/${roomCode}`);
+      if(data)loadRoomState(data);
+      else freshState();
+    }else{
+      // New player joining
+      const data=await fbGet(`rooms/${roomCode}`);
+      if(!data){
+        // Room not found — create fresh as Ice
+        myColor='w';
+        freshState();
+        localStorage.setItem(`chess_${roomCode}`,'w');
+        const fen=toFEN();
+        lastSyncedFen=fen;
+        await fbSet(`rooms/${roomCode}`,{
+          fen,moveHistory:[],capturedW:[],capturedB:[],
+          lastMove:null,gameOver:false,gameOverData:null,
+          players:{ice:true,fire:false}
+        });
+      }else if(!data.players?.fire){
+        // Take fire slot
+        myColor='b';
+        localStorage.setItem(`chess_${roomCode}`,'b');
+        await fbPatch(`rooms/${roomCode}/players`,{fire:true});
+        loadRoomState(data);
+        toast('🔥 You joined as Fire Warriors! Good luck!');
+      }else{
+        // Room full — spectate
+        myColor=null;
+        loadRoomState(data);
+        toast('👁 Spectating this game');
+      }
+    }
+  }
+
+  startPolling();
+  updateMultiplayerUI();
+  updateSidebar();
+  buildBoard();
+  updateTurnIndicator(false);
+}
+
+// ─── Buttons ──────────────────────────────────────────────────────────────────
+document.getElementById('shareBtn').addEventListener('click',()=>{
+  const url=new URL(location.href);
+  url.searchParams.set('room',roomCode);
+  const link=url.toString();
+  navigator.clipboard.writeText(link)
+    .then(()=>toast('Room link copied! Send it to your friend 🎉'))
+    .catch(()=>prompt('Copy this link and send it to your friend:',link));
+});
+
+document.getElementById('resetBtn').addEventListener('click',()=>{
+  if(!confirm('Start a new game? This resets the board for both players.'))return;
+  resetGame();
+});
+
+async function resetGame(){
+  freshState();
+  document.getElementById('overlay').classList.remove('show');
+  document.getElementById('promoModal').classList.remove('show');
+  updateSidebar();
+  buildBoard();
+  updateTurnIndicator(false);
+  if(roomCode){
+    const fen=toFEN();
+    lastSyncedFen=fen;
+    await fbPatch(`rooms/${roomCode}`,{
+      fen,moveHistory:[],capturedW:[],capturedB:[],
+      lastMove:null,gameOver:false,gameOverData:null
+    });
+  }
+}
+
+function toast(msg){
+  const el=document.getElementById('toast');
+  el.textContent=msg;
+  el.classList.add('show');
+  setTimeout(()=>el.classList.remove('show'),3500);
+}
+
+// ─── Boot ─────────────────────────────────────────────────────────────────────
+freshState();
+buildBoard();
+initMultiplayer();
+</script>
+</body>
+</html>
